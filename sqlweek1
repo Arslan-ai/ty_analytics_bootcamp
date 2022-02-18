@@ -1,0 +1,179 @@
+
+########################### ÖDEV 1 #####################
+
+Task : Promosyon çıkılmış fakat hiç satılmamış ürünleri tespit edebilir miyiz?
+
+
+
+Features :
+
+v2ProductName : Product Name itself
+visitId:	An identifier for this session. This is part of the value usually stored as the _utmb cookie.
+This is only unique to the user. For a completely unique ID, you should use a combination of fullVisitorId and visitId.
+
+hits:This row and nested fields are populated for any and all types of hits.
+
+product:This row and nested fields will be populated for each hit that contains Enhanced Ecommerce PRODUCT data.
+
+promotion:This row and nested fields are populated for each hit that contains Enhanced Ecommerce PROMOTION information.
+
+hour: The hour in which the hit occurred (0 to 23).
+
+
+promoName: Promotion Name.
+
+
+eCommerceAction.action_type : The action type. Click through of product lists = 1, Product detail views = 2, Add product(s) to cart = 3, Remove product(s) from cart = 4, Check out = 5,
+Completed purchase = 6, Refund of purchase = 7, Checkout options = 8, Unknown = 0.
+Usually this action type applies to all the products in a hit, with the following exception: when hits.product.isImpression = TRUE,
+the corresponding product is a product impression that is seen while the product action is taking place (i.e., a "product in list view").
+
+
+
+""" 
+why not promoisview or promoisclick ?
+ """
+
+- the main benefit is that we get access to a lot of new valuable reports
+- promoIsView : True if the Enhanced Ecommerce action is a promo view.
+- promoIsClick:	True if the Enhanced Ecommerce action is a promo click.
+- Enhanced ecommerce : Enhanced Ecommerce (EEC) is a Google Analytics plug-in, which gives us an opportunity to get better insights in the shopping behavior of our users. When we compare EEC with standard Ecommerce implementation –
+- totals.pageviews: INTEGER Total number of pageviews within the session. only web
+- totals.screenviews: INTEGER Total number of screenviews within the session. web + app but has null values
+- Promotion:  The Internal Promotion Click is the amount of times that a user has clicked the particular promotion, banner or advert.
+- Enhanced ecommerce : Enhanced Ecommerce (EEC) is a Google Analytics plug-in, which gives us an opportunity to get better insights in the shopping behavior of our users. When we compare EEC with standard Ecommerce implementation –
+
+Task: Promosyon çıkılmış fakat hiç satılmamış ürünleri tespit edebilir miyiz?
+
+
+
+
+select distinct v2ProductName from `data-to-insights.ecommerce.web_analytics` wa
+  FULL OUTER JOIN (select visitId,v2ProductName from `data-to-insights.ecommerce.web_analytics` pr
+  CROSS JOIN UNNEST(pr.hits) h
+  CROSS JOIN UNNEST (h.product) prr
+
+) vr on vr.visitId = wa.visitId
+  CROSS JOIN UNNEST(wa.hits) h
+  CROSS JOIN UNNEST (h.promotion) p
+  where promoName is not null and eCommerceAction.action_type != "6" and v2ProductName is not null
+  order by v2ProductName
+  limit 15
+
+
+
+#Row	v2ProductName
+#1	Google Men's Vintage Badge Tee White
+#2	YouTube Men's Vintage Tank
+#3	Android Men's Vintage Tank
+#4	Windup Android
+#5	YouTube Wool Heather Cap Heather/Black
+#6	Google Men's Performance Polo Grey/Black
+#7	Google Men's Long Sleeve Pullover Badge Tee Heather
+#8	Android BTTF Cosmos Graphic Tee
+#9	Google Heavyweight Long Sleeve Hero Tee Navy
+#10	Google Men's Performance Full Zip Jacket Black
+#11	26 oz Double Wall Insulated Bottle
+#12	Insulated Bottle
+#13	YouTube RFID Journal
+#14	Google G Noise-reducing Bluetooth Headphones
+#15	Google Tube Power Bank
+
+# promo array product array açılımı
+############### ÖDEV 2 ##################################
+
+
+
+Task : Mart, nisan, mayıs aylarında ziyaretçilerin en çok görüntülediği fakat satın alınmamış ürünlere ihtiyacımız var.
+Her ayın top 10 ürününü gösterebilir misiniz? (Tarih yıl - ay olarak gösterilmeli.)
+
+
+with unsold as (select v2ProductName,parse_date("%Y%m%d",date) timeline,count(visitId) as totalviews,extract(month from parse_date("%Y%m%d",date) ) as months,extract(year from parse_date("%Y%m%d",date) ) as years
+ from `data-to-insights.ecommerce.web_analytics` wa
+CROSS JOIN UNNEST(wa.hits) h
+CROSS JOIN UNNEST (h.product) p
+where eCommerceAction.action_type != "6"
+group by 2,1,4,5),
+march as (select v2ProductName,extract(month from timeline ) months,years,totalviews from unsold
+where extract(month from timeline ) in (3)
+group by 1,2,3,4
+order by totalviews desc
+limit 10),
+april as (select v2ProductName,extract(month from timeline ) months,years,totalviews from unsold
+where extract(month from timeline ) in (4)
+group by 1,2,3,4
+order by totalviews desc
+limit 10
+),
+may as (select v2ProductName,extract(month from timeline ) months,years,totalviews from unsold
+where extract(month from timeline ) in (5)
+group by 1,2,3,4
+order by totalviews desc
+limit 10
+)
+
+select  v2ProductName, months,years,totalviews from march
+UNION ALL (select v2ProductName, months,years,totalviews from april)
+UNION ALL (select v2ProductName, months,years,totalviews from may)
+order by months
+
+
+
+##############################################################
+###########ÖDEV 3 ##############
+
+Task: E ticaret sitemiz için günün bölümlerinde, en fazla ilgi gören kategorileri öğrenmek istiyoruz.
+
+
+with attention as (select v2ProductCategory,hour,
+case
+   when h.hour < 5
+      then 'Midnight'
+   when h.hour between 5 and 12
+      then 'Morning'
+   when h.hour between 13 and 17
+      then 'Afternoon'
+   when h.hour > 17
+      then 'Evening'
+end as daytime,count(visitId) as totalviews
+ from  `data-to-insights.ecommerce.web_analytics` wa
+CROSS JOIN UNNEST(wa.hits) h
+CROSS JOIN UNNEST (h.product) p
+group by 2,1
+order by totalviews desc
+), mn_time as ( select * from attention
+where daytime = "Midnight"
+order by totalviews desc
+limit 1),
+ mor_time as (
+select * from attention
+where daytime = "Morning"
+order by totalviews desc
+limit 1
+),
+ aft_time as (
+select * from attention
+where daytime = "Afternoon"
+order by totalviews desc
+limit 1
+),
+ ev_time as (
+select * from attention
+where daytime = "Evening"
+order by totalviews desc
+limit 1
+)
+select * from mn_time
+UNION ALL (select * from mor_time)
+UNION ALL (select * from aft_time)
+UNION ALL (select * from ev_time)
+
+
+
+
+
+
+
+
+
+
